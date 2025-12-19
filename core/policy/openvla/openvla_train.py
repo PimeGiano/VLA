@@ -56,6 +56,7 @@ class OpenVLAPolicy:
             device_map=self.device,
             vh_mode="a0",
         )
+        self.vla.args = self.args
 
         # openvla: lora
         if not self.args.vla_load_path:

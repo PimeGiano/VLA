@@ -17,6 +17,7 @@ cd SimplerEnv && pip install -e . && cd ..
 ```
 
 ```shell
+# Download weights
 pip install -U huggingface_hub hf-transfer
 huggingface-cli download --resume-download gen-robot/openvla-7b-rlvla-warmup --local-dir ./weights/openvla-7b-rlvla-warmup
 ```
@@ -24,7 +25,7 @@ huggingface-cli download --resume-download gen-robot/openvla-7b-rlvla-warmup --l
 # run
 
 ```shell
-# ./openvla_rl_ms_train.sh [cuda_id] [task_type:0-RL4VLA 1-OpenVLA + PPO 3-OpenVLA + FAN-PPO]
+# ./openvla_rl_ms_train.sh [cuda_id] [task_type:1-RL4VLA 2-OpenVLA + PPO 3-OpenVLA + FAN-PPO]
 ./openvla_rl_ms_train.sh 0 3
 ```
 

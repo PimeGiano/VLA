@@ -7,3 +7,5 @@ __pycache__
 
 wandb/
 weights/
+checkpoints/
+ms3_datasets/

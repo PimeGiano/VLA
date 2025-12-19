@@ -24,6 +24,8 @@ from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
+import datetime
+import pdb
 
 import draccus
 import torch
@@ -51,6 +53,7 @@ from prismatic.extern.hf.processing_prismatic import PrismaticImageProcessor, Pr
 
 # Sane Defaults
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
+os.environ["TQDM_DISABLE"] = "1"
 
 
 # # === Utilities ===
@@ -127,7 +130,8 @@ def finetune(cfg: FinetuneConfig) -> None:
     torch.cuda.empty_cache()
 
     # Configure Unique Experiment ID & Log Directory
-    exp_id = f"steps_{cfg.max_steps}"
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    exp_id = f"steps_{cfg.max_steps}_{timestamp}"                   # exp_id = f"steps_{cfg.max_steps}"
     if not cfg.image_aug:
         exp_id += "-no_aug"
 
@@ -273,11 +277,12 @@ def finetune(cfg: FinetuneConfig) -> None:
         optimizer.zero_grad()
         for batch_idx, batch in enumerate(dataloader):
             with torch.autocast("cuda", dtype=torch.bfloat16):
+                # pdb.set_trace()
                 output: CausalLMOutputWithPast = vla(
                     input_ids=batch["input_ids"].to(device_id),
                     attention_mask=batch["attention_mask"].to(device_id),
                     pixel_values=batch["pixel_values"].to(torch.bfloat16).to(device_id),
-                    labels=batch["labels"],
+                    labels=batch["labels"],         # [batch_size=12, ?=31]
                 )
                 loss = output.loss
 
@@ -305,6 +310,9 @@ def finetune(cfg: FinetuneConfig) -> None:
                 action_tokenizer.decode_token_ids_to_actions(action_gt[mask].cpu().numpy())
             )
             action_l1_loss = torch.nn.functional.l1_loss(continuous_actions_pred, continuous_actions_gt)
+            # if action_accuracy < 0.1 or action_l1_loss > 0.5:
+            #     pdb.set_trace()
+            #     i = 0
 
             # Store recent train metrics
             recent_losses.append(loss.item())
@@ -390,7 +398,6 @@ def finetune(cfg: FinetuneConfig) -> None:
                     )
 
                 dist.barrier()
-
 
             # Save Model Checkpoint =>> by default, only keeps the latest checkpoint, continually overwriting it!
             if gradient_step_idx in save_step_list:

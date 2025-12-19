@@ -1,12 +1,12 @@
 #!/bin/bash
 
-cuda="0,1,2,3"
+cuda="7"
 
 task_name="sft"
 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True CUDA_VISIBLE_DEVICES=$cuda \
-torchrun --standalone --nnodes 1 --nproc-per-node 4 ../openvla/vla-scripts/finetune.py \
-  --vla_path "../weights/openvla-7b-rlvla-warmup" \
-  --data_root_dir "/home/kyzhang/workspace/kyzhang/datasets/ms3_datasets" \
+torchrun --standalone --nnodes 1 --nproc-per-node 1 ./openvla/vla-scripts/finetune.py \
+  --vla_path "./weights/openvla-7b-rlvla-warmup" \
+  --data_root_dir "./ms3_datasets" \
   --dataset_name ${task_name} \
   --run_root_dir checkpoints/${task_name} \
   --lora_rank 32 \

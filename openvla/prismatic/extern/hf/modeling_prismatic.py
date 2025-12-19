@@ -13,6 +13,7 @@ References [LLaVa, IDEFICS-2]:
 """
 
 import logging
+import pdb
 from dataclasses import dataclass
 from functools import partial
 from typing import Any, Callable, ClassVar, Dict, List, Optional, Tuple, Union
@@ -304,6 +305,7 @@ class PrismaticForConditionalGeneration(PrismaticPreTrainedModel):
         output_projector_features: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, PrismaticCausalLMOutputWithPast]:
+        
         """Run a forward pass through the VLM, returning a PrismaticCausalLMOutputWithPast instance."""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -632,6 +634,8 @@ class OpenVLAForActionPredictionWithValueHead(PrismaticForConditionalGeneration)
 
     def __init__(self, config: OpenVLAConfig, vh_mode: str) -> None:
         super().__init__(config)
+        from core.utils.args import CLIArgs
+        self.args : CLIArgs
 
         # Value head
         print(f"Using value head mode: {vh_mode}")
@@ -763,36 +767,72 @@ class OpenVLAForActionPredictionWithValueHead(PrismaticForConditionalGeneration)
             return_dict=True,  # output dict
         )
 
-        # find first valid token index
-        #  IG  IG
-        #  -   -  a0  a6  eos ?
-        #  |   |   |   |   |  |
-        # bos img img a0  a6 eos
+        # zyz
+        logits_prepared = outputs.logits
+        total_action_dims = logits_prepared.size(1)
+        action_dim = getattr(self.args, "dist_action_dim", None) or total_action_dims
+        if action_dim <= 0:
+            action_dim = total_action_dims
+        if total_action_dims % action_dim != 0:
+            action_dim = total_action_dims
 
-        # logits 取出动作对应位置的 logits
-        logits_tensor = outputs.logits[:, -action_len - 2: -2]  # [B, L, vocab_size + 64]
-        logits_tensor = logits_tensor[:, :, 32000 - 256 : 32000] # [B, action_len, 256]
+        constrained_dims = getattr(self.args, "dist_constrained_dims", action_dim)
+        constrained_dims = max(0, min(int(constrained_dims), action_dim))
 
-        # 温度缩放 + softmax
-        logits_tensor /= coef
-        logprobs_tensor = F.log_softmax(logits_tensor, dim=-1)  # [B, action_len, 256]
+        max_chunk_num = getattr(self.args, "dist_max_chunk_num", 1)
+        if max_chunk_num is not None:
+            max_chunk_num = max(1, int(max_chunk_num))
 
-        idxes = labels[:, -action_len - 1: -1].unsqueeze(-1) - (32000 - 256)  # [B, action_len, 1]
-        idxes = idxes.to(logprobs_tensor.device) # [B, action_len, 1]
-        # 按照idxes索引，取出每个样本、每个动作位置上实际生成的动作token的log概率
-        logprobs = torch.gather(logprobs_tensor, 2, idxes).squeeze(-1)  # [B, action_len]
-        logprobs_sum = coef * logprobs.sum(dim=1, keepdim=True)  # [B, 1]
+        from .losses import compute_diss_loss
+        dist_loss, sigma_record = compute_diss_loss(
+            logits_prepared,
+            action_dim=action_dim,
+            constrained_dims=constrained_dims,
+            max_chunk_num=max_chunk_num,
+            loss_type=str(getattr(self.args, "dist_loss_type", "simplest")),
+            tau=float(getattr(self.args, "dist_tau", 0.0)),
+            trunc_k=getattr(self.args, "dist_trunc_k", None),
+            topk=getattr(self.args, "dist_topk", None),
+            kernel_sigma=float(getattr(self.args, "kernel_sigma", 1.0)),
+            min_sigma=float(getattr(self.args, "dist_min_sigma", 1e-3)),
+            fixed_sigma=getattr(self.args, "dist_fixed_sigma", None),
+            peak_window_bins=getattr(self.args, "dist_peak_window_bins", None),
+            eps=float(getattr(self.args, "dist_eps", 1e-6)),
+        )
+        # pdb.set_trace()
+        return -dist_loss.mean(dim=1, keepdim=True)
+        # zyz
 
-        if not with_VQ:
-            return logprobs_sum
+        # # find first valid token index
+        # #  IG  IG
+        # #  -   -  a0  a6  eos ?
+        # #  |   |   |   |   |  |
+        # # bos img img a0  a6 eos
 
-        # 取出action第一个degree对应的V_Q
-        logits_a0 = outputs.logits[:, -action_len - 2]  # [B, vocab_size + 64]
-        logits_a0 = logits_a0[:, 32000 - 256 : 32000]  # [B, 256]
-        logits_a0_scaled = logits_a0 / coef
-        V_Q_1 = coef * torch.logsumexp(logits_a0_scaled, dim=-1, keepdim=True)  # [B, 1]
+        # # logits 取出动作对应位置的 logits
+        # logits_tensor = outputs.logits[:, -action_len - 2: -2]  # [B, L, vocab_size + 64]
+        # logits_tensor = logits_tensor[:, :, 32000 - 256 : 32000] # [B, action_len, 256]
 
-        return logprobs_sum + V_Q_1
+        # # 温度缩放 + softmax
+        # logits_tensor /= coef
+        # logprobs_tensor = F.log_softmax(logits_tensor, dim=-1)  # [B, action_len, 256]
+
+        # idxes = labels[:, -action_len - 1: -1].unsqueeze(-1) - (32000 - 256)  # [B, action_len, 1]
+        # idxes = idxes.to(logprobs_tensor.device) # [B, action_len, 1]
+        # # 按照idxes索引，取出每个样本、每个动作位置上实际生成的动作token的log概率
+        # logprobs = torch.gather(logprobs_tensor, 2, idxes).squeeze(-1)  # [B, action_len]
+        # logprobs_sum = coef * logprobs.sum(dim=1, keepdim=True)  # [B, 1]
+
+        # if not with_VQ:
+        #     return logprobs_sum
+
+        # # 取出action第一个degree对应的V_Q
+        # logits_a0 = outputs.logits[:, -action_len - 2]  # [B, vocab_size + 64]
+        # logits_a0 = logits_a0[:, 32000 - 256 : 32000]  # [B, 256]
+        # logits_a0_scaled = logits_a0 / coef
+        # V_Q_1 = coef * torch.logsumexp(logits_a0_scaled, dim=-1, keepdim=True)  # [B, 1]
+
+        # return logprobs_sum + V_Q_1
 
     def get_value(self,
             input_ids: torch.LongTensor,

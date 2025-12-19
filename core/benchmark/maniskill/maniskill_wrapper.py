@@ -224,6 +224,7 @@ class ManiSkillWrapper:
         Returns:
             Combined reward tensor [num_envs, 1]
         """
+        # import pdb;pdb.set_trace()
         if not self.args.use_endoRM:
             # When endogenous reward is disabled, return only environment reward
             return env_reward

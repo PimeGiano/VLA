@@ -4,6 +4,7 @@ import pprint
 import random
 import gc
 import signal
+import pdb
 from collections import defaultdict
 import time
 from pathlib import Path
@@ -93,7 +94,7 @@ class Runner:
             reward_ranks = [int(x) for x in self.args.reward_gpu_rank.split(',')]
             self.reward_local_rank = reward_ranks[self.local_rank]
         self.is_main = is_main_process()
-
+        # pdb.set_trace()
         # set seed (不同rank不同seed)
         np.random.seed(self.args.seed + self.rank)
         random.seed(self.args.seed + self.rank)
@@ -172,6 +173,7 @@ class Runner:
             reward_args = replace(all_args, vla_path=reward_model_path)
             reward_args = replace(reward_args, vla_load_path=reward_model_lora_path)
             self.reward_model = OpenVLAPolicy(reward_args, self.reward_device)
+            self.reward_model.vla.module.args = self.args
             # 确保 reward_model 仅用于推理：设置 eval 并冻结所有参数，避免被任何优化器或反向传播更新
             self.reward_model.vla.eval()
             for p in self.reward_model.vla.parameters():
@@ -1010,6 +1012,7 @@ class Runner:
             save_debug_rollout_videos(self.args, self.buffer, self.glob_dir, episode, self.rank)
 
             # train
+            # pdb.set_trace()
             infos = self.train(episode_progress)
 
             # 为了计算advantage，在train后保存buffer信息

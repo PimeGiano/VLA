@@ -14,13 +14,13 @@ PACKAGE_ASSET_DIR = PACKAGE_DIR / "assets"
 # Non-package data
 ASSET_DIR = Path(
     os.path.join(
-        os.getenv("MS_ASSET_DIR", os.path.join(os.path.expanduser("~"), ".maniskill")),
+        os.getenv("MS_ASSET_DIR", os.path.join(os.path.expanduser("~"), "workspace/zyz518348/FAN-VLA/ManiSkill/.maniskill")),
         "data",
     )
 )
 DEMO_DIR = Path(
     os.path.join(
-        os.getenv("MS_ASSET_DIR", os.path.join(os.path.expanduser("~"), ".maniskill")),
+        os.getenv("MS_ASSET_DIR", os.path.join(os.path.expanduser("~"), "workspace/zyz518348/FAN-VLA/ManiSkill/.maniskill")),
         "demos",
     )
 )
